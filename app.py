@@ -8,6 +8,7 @@ import io
 import zipfile
 from datetime import datetime
 from dotenv import load_dotenv
+import fitz  # PyMuPDF for PDF handling
 
 import sys
 
@@ -65,6 +66,34 @@ def encode_image_to_base64(image_path):
     """将图片编码为base64格式"""
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
+
+
+def pdf_to_image(pdf_path):
+    """将PDF首页转换为图片，返回临时图片路径"""
+    try:
+        doc = fitz.open(pdf_path)
+        if len(doc) == 0:
+            return None
+
+        # 获取第一页
+        page = doc[0]
+
+        # 设置缩放比例（2x 提高清晰度）
+        zoom = 2.0
+        mat = fitz.Matrix(zoom, zoom)
+
+        # 渲染为像素图
+        pix = page.get_pixmap(matrix=mat)
+
+        # 保存为临时PNG文件
+        temp_image_path = pdf_path.rsplit(".", 1)[0] + "_temp.png"
+        pix.save(temp_image_path)
+
+        doc.close()
+        return temp_image_path
+    except Exception as e:
+        print(f"PDF转图片失败: {e}")
+        return None
 
 
 def extract_info_from_image(image_path, naming_prompt=None):
@@ -144,9 +173,9 @@ def generate_new_filename(ai_generated_name, original_extension):
 
     # 如果AI返回的是有效内容，使用它；否则使用时间戳
     if cleaned_name and cleaned_name != "未知图片" and len(cleaned_name.strip()) > 0:
-        # 如果AI返回的名字已经包含图片扩展名，先移除它（避免双重扩展名如 xxx.jpg.jpg）
-        image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]
-        for ext in image_extensions:
+        # 如果AI返回的名字已经包含图片/PDF扩展名，先移除它（避免双重扩展名如 xxx.jpg.jpg）
+        known_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".pdf"]
+        for ext in known_extensions:
             if cleaned_name.lower().endswith(ext):
                 cleaned_name = cleaned_name[: -len(ext)]
                 break
@@ -188,8 +217,16 @@ def upload_files():
                 original_filename = file.filename
                 file_extension = os.path.splitext(original_filename)[1].lower()
 
-                # 检查文件类型
-                if file_extension not in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
+                # 检查文件类型（支持图片和PDF）
+                supported_extensions = [
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".bmp",
+                    ".tiff",
+                    ".pdf",
+                ]
+                if file_extension not in supported_extensions:
                     results.append(
                         {
                             "original_name": original_filename,
@@ -203,8 +240,31 @@ def upload_files():
                 upload_path = os.path.join(UPLOADS_DIR, original_filename)
                 file.save(upload_path)
 
+                # 如果是PDF，先转换为图片再识别
+                temp_image_path = None
+                if file_extension == ".pdf":
+                    temp_image_path = pdf_to_image(upload_path)
+                    if not temp_image_path:
+                        results.append(
+                            {
+                                "original_name": original_filename,
+                                "status": "error",
+                                "message": "PDF转换失败",
+                            }
+                        )
+                        continue
+                    image_path_for_ai = temp_image_path
+                else:
+                    image_path_for_ai = upload_path
+
                 # 使用AI生成文件名（传入命名规则）
-                ai_generated_name = extract_info_from_image(upload_path, naming_prompt)
+                ai_generated_name = extract_info_from_image(
+                    image_path_for_ai, naming_prompt
+                )
+
+                # 清理临时图片文件
+                if temp_image_path and os.path.exists(temp_image_path):
+                    os.remove(temp_image_path)
 
                 # 生成新文件名
                 new_filename = generate_new_filename(ai_generated_name, file_extension)

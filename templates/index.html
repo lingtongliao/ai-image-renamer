@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI图片文件名智能重命名工具</title>
+    <title>AI图片/PDF文件名智能重命名工具</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1><i class="fas fa-robot"></i> AI图片文件名智能重命名工具</h1>
-            <p class="subtitle">基于AI视觉模型，自动识别图片内容并按规则重命名</p>
+            <h1><i class="fas fa-robot"></i> AI图片/PDF文件名智能重命名工具</h1>
+            <p class="subtitle">基于AI视觉模型，自动识别图片和PDF内容并按规则重命名</p>
         </header>
 
         <!-- 命名规则设置区域 -->
@@ -55,11 +55,11 @@
             <div class="upload-area" id="uploadArea">
                 <div class="upload-content">
                     <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                    <h3>拖拽图片到此处或点击选择文件</h3>
-                    <p>支持 JPG、PNG、BMP、TIFF 格式，可同时上传多个文件</p>
-                    <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.bmp,.tiff" style="display: none;">
+                    <h3>拖拽文件到此处或点击选择文件</h3>
+                    <p>支持 JPG、PNG、BMP、TIFF、PDF 格式，可同时上传多个文件</p>
+                    <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.bmp,.tiff,.pdf" style="display: none;">
                     <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
-                        <i class="fas fa-folder-open"></i> 选择图片
+                        <i class="fas fa-folder-open"></i> 选择文件
                     </button>
                 </div>
             </div>
@@ -133,12 +133,12 @@
         });
 
         function handleFileSelection(files) {
-            // 过滤支持的文件类型
-            const supportedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/tiff'];
-            const validFiles = files.filter(file => supportedTypes.includes(file.type));
+            // 过滤支持的文件类型（图片和PDF）
+            const supportedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/tiff', 'application/pdf'];
+            const validFiles = files.filter(file => supportedTypes.includes(file.type) || file.name.toLowerCase().endsWith('.pdf'));
             
             if (validFiles.length === 0) {
-                alert('请选择支持的图片格式（JPG、PNG、BMP、TIFF）');
+                alert('请选择支持的文件格式（JPG、PNG、BMP、TIFF、PDF）');
                 return;
             }
 
@@ -161,9 +161,11 @@
             selectedFiles.forEach((file, index) => {
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
+                const isPDF = file.name.toLowerCase().endsWith('.pdf');
+                const iconClass = isPDF ? 'fa-file-pdf' : 'fa-image';
                 fileItem.innerHTML = `
                     <div class="file-info">
-                        <i class="fas fa-image"></i>
+                        <i class="fas ${iconClass}"></i>
                         <span class="file-name">${file.name}</span>
                         <span class="file-size">(${formatFileSize(file.size)})</span>
                     </div>
@@ -204,7 +206,7 @@
 
         async function uploadFiles() {
             if (selectedFiles.length === 0) {
-                alert('请先选择图片文件');
+                alert('请先选择文件');
                 return;
             }
 
@@ -314,7 +316,7 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = 'renamed_images.zip';
+                    a.download = 'renamed_files.zip';
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
