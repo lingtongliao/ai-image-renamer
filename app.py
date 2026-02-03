@@ -11,9 +11,6 @@ from dotenv import load_dotenv
 
 import sys
 
-# 加载环境变量
-load_dotenv()
-
 # 获取应用基础路径（兼容 PyInstaller 打包后的路径）
 if getattr(sys, "frozen", False):
     # 如果是打包后的 exe，使用 exe 所在目录
@@ -21,6 +18,10 @@ if getattr(sys, "frozen", False):
 else:
     # 如果是 Python 脚本，使用脚本所在目录
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 显式加载当前目录下的 .env 文件
+dotenv_path = os.path.join(BASE_DIR, ".env")
+load_dotenv(dotenv_path)
 
 app = Flask(
     __name__,
