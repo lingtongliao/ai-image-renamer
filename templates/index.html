@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI图片文件名智能重命名工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-robot"></i> AI图片文件名智能重命名工具</h1>
+            <p class="subtitle">基于AI视觉模型，自动识别图片内容并按规则重命名</p>
+        </header>
+
+        <!-- 命名规则设置区域 -->
+        <div class="settings-section">
+            <h3><i class="fas fa-cog"></i> 命名规则设置</h3>
+            <div class="prompt-input-wrapper">
+                <label for="namingPrompt">AI提示词（告诉AI如何命名文件）：</label>
+                <textarea id="namingPrompt" class="prompt-textarea" rows="3" placeholder="输入命名规则...">{{ default_prompt }}</textarea>
+                <div class="prompt-tips">
+                    <p><i class="fas fa-lightbulb"></i> <strong>提示：</strong>描述您希望AI如何从图片中提取信息并命名文件</p>
+                    <details class="prompt-examples">
+                        <summary>查看示例模板</summary>
+                        <div class="example-list">
+                            <div class="example-item" onclick="useTemplate(this)">
+                                <strong>发票/收据：</strong>
+                                <code>识别图片内容，将图片命名为日期，客户名称，金额，不要其他多余的文字（最后要加一个。号），比如：2022年5月10日，中海上湾卖水泥陈培，金额0元。</code>
+                            </div>
+                            <div class="example-item" onclick="useTemplate(this)">
+                                <strong>身份证：</strong>
+                                <code>识别身份证信息，提取姓名和身份证号码，命名格式：姓名_身份证号</code>
+                            </div>
+                            <div class="example-item" onclick="useTemplate(this)">
+                                <strong>产品图片：</strong>
+                                <code>识别产品图片，提取产品名称、品牌、规格，命名格式：品牌_产品名_规格</code>
+                            </div>
+                            <div class="example-item" onclick="useTemplate(this)">
+                                <strong>文档扫描件：</strong>
+                                <code>识别文档内容，提取标题和日期，命名格式：日期_文档标题</code>
+                            </div>
+                            <div class="example-item" onclick="useTemplate(this)">
+                                <strong>合同文件：</strong>
+                                <code>识别合同信息，提取合同编号、甲方名称、签订日期，命名格式：合同编号_甲方_日期</code>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-content">
+                    <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                    <h3>拖拽图片到此处或点击选择文件</h3>
+                    <p>支持 JPG、PNG、BMP、TIFF 格式，可同时上传多个文件</p>
+                    <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.bmp,.tiff" style="display: none;">
+                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-folder-open"></i> 选择图片
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="file-list" id="fileList" style="display: none;">
+            <h3><i class="fas fa-list"></i> 已选择的文件</h3>
+            <div id="selectedFiles"></div>
+            <div class="action-buttons">
+                <button class="btn btn-success" id="uploadBtn" onclick="uploadFiles()">
+                    <i class="fas fa-upload"></i> 开始处理
+                </button>
+                <button class="btn btn-secondary" onclick="clearSelection()">
+                    <i class="fas fa-times"></i> 清空选择
+                </button>
+            </div>
+        </div>
+
+        <div class="progress-section" id="progressSection" style="display: none;">
+            <h3><i class="fas fa-cog fa-spin"></i> 处理中...</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p id="progressText">正在处理图片，请稍候...</p>
+        </div>
+
+        <div class="results-section" id="resultsSection" style="display: none;">
+            <h3><i class="fas fa-check-circle"></i> 处理结果</h3>
+            <div class="results-summary" id="resultsSummary"></div>
+            <div class="results-list" id="resultsList"></div>
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="downloadBtn" onclick="downloadAll()">
+                    <i class="fas fa-download"></i> 下载所有重命名文件
+                </button>
+                <button class="btn btn-warning" onclick="clearFiles()">
+                    <i class="fas fa-trash"></i> 清空所有文件
+                </button>
+                <button class="btn btn-secondary" onclick="resetApp()">
+                    <i class="fas fa-refresh"></i> 重新开始
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+
+        // 文件拖拽功能
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = Array.from(e.dataTransfer.files);
+            handleFileSelection(files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            handleFileSelection(files);
+        });
+
+        function handleFileSelection(files) {
+            // 过滤支持的文件类型
+            const supportedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/tiff'];
+            const validFiles = files.filter(file => supportedTypes.includes(file.type));
+            
+            if (validFiles.length === 0) {
+                alert('请选择支持的图片格式（JPG、PNG、BMP、TIFF）');
+                return;
+            }
+
+            selectedFiles = validFiles;
+            displaySelectedFiles();
+        }
+
+        function displaySelectedFiles() {
+            const fileList = document.getElementById('fileList');
+            const selectedFilesDiv = document.getElementById('selectedFiles');
+            
+            if (selectedFiles.length === 0) {
+                fileList.style.display = 'none';
+                return;
+            }
+
+            fileList.style.display = 'block';
+            selectedFilesDiv.innerHTML = '';
+
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <i class="fas fa-image"></i>
+                        <span class="file-name">${file.name}</span>
+                        <span class="file-size">(${formatFileSize(file.size)})</span>
+                    </div>
+                    <button class="btn-remove" onclick="removeFile(${index})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                selectedFilesDiv.appendChild(fileItem);
+            });
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            displaySelectedFiles();
+        }
+
+        function clearSelection() {
+            selectedFiles = [];
+            fileInput.value = '';
+            displaySelectedFiles();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 使用模板
+        function useTemplate(element) {
+            const code = element.querySelector('code');
+            if (code) {
+                document.getElementById('namingPrompt').value = code.textContent;
+            }
+        }
+
+        async function uploadFiles() {
+            if (selectedFiles.length === 0) {
+                alert('请先选择图片文件');
+                return;
+            }
+
+            // 显示进度条
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('uploadBtn').disabled = true;
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+            
+            // 添加命名规则
+            const namingPrompt = document.getElementById('namingPrompt').value.trim();
+            formData.append('naming_prompt', namingPrompt);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    displayResults(result);
+                } else {
+                    throw new Error(result.error || '上传失败');
+                }
+            } catch (error) {
+                alert('处理失败: ' + error.message);
+                console.error('Error:', error);
+            } finally {
+                document.getElementById('progressSection').style.display = 'none';
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        }
+
+        function displayResults(result) {
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsSummary = document.getElementById('resultsSummary');
+            const resultsList = document.getElementById('resultsList');
+
+            resultsSection.style.display = 'block';
+
+            // 显示摘要
+            resultsSummary.innerHTML = `
+                <div class="summary-stats">
+                    <div class="stat-item">
+                        <span class="stat-number">${result.total_processed}</span>
+                        <span class="stat-label">总文件数</span>
+                    </div>
+                    <div class="stat-item success">
+                        <span class="stat-number">${result.success_count}</span>
+                        <span class="stat-label">成功处理</span>
+                    </div>
+                    <div class="stat-item error">
+                        <span class="stat-number">${result.total_processed - result.success_count}</span>
+                        <span class="stat-label">处理失败</span>
+                    </div>
+                </div>
+            `;
+
+            // 显示详细结果
+            resultsList.innerHTML = '';
+            result.results.forEach(item => {
+                const resultItem = document.createElement('div');
+                resultItem.className = `result-item ${item.status}`;
+                
+                if (item.status === 'success') {
+                    resultItem.innerHTML = `
+                        <div class="result-header">
+                            <i class="fas fa-check-circle"></i>
+                            <span class="original-name">${item.original_name}</span>
+                            <i class="fas fa-arrow-right"></i>
+                            <span class="new-name">${item.new_name}</span>
+                        </div>
+                        <div class="extracted-info">
+                            <div class="info-item">
+                                <strong>AI识别结果:</strong> ${item.ai_generated_name}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultItem.innerHTML = `
+                        <div class="result-header">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span class="original-name">${item.original_name}</span>
+                            <span class="error-message">${item.message}</span>
+                        </div>
+                    `;
+                }
+                
+                resultsList.appendChild(resultItem);
+            });
+
+            // 启用下载按钮（如果有成功处理的文件）
+            document.getElementById('downloadBtn').disabled = result.success_count === 0;
+        }
+
+        async function downloadAll() {
+            try {
+                const response = await fetch('/download_all');
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'renamed_images.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+                    throw new Error('下载失败');
+                }
+            } catch (error) {
+                alert('下载失败: ' + error.message);
+            }
+        }
+
+        async function clearFiles() {
+            if (confirm('确定要清空所有文件吗？此操作不可恢复。')) {
+                try {
+                    const response = await fetch('/clear');
+                    const result = await response.json();
+                    if (response.ok) {
+                        alert('文件已清空');
+                        resetApp();
+                    } else {
+                        throw new Error(result.error);
+                    }
+                } catch (error) {
+                    alert('清空失败: ' + error.message);
+                }
+            }
+        }
+
+        function resetApp() {
+            selectedFiles = [];
+            fileInput.value = '';
+            document.getElementById('fileList').style.display = 'none';
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('uploadBtn').disabled = false;
+        }
+    </script>
+</body>
+</html>
