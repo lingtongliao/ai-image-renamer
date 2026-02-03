@@ -9,10 +9,30 @@ import zipfile
 from datetime import datetime
 from dotenv import load_dotenv
 
+import sys
+
 # 加载环境变量
 load_dotenv()
 
-app = Flask(__name__)
+# 获取应用基础路径（兼容 PyInstaller 打包后的路径）
+if getattr(sys, "frozen", False):
+    # 如果是打包后的 exe，使用 exe 所在目录
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # 如果是 Python 脚本，使用脚本所在目录
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static"),
+)
+
+# 定义各文件夹的绝对路径
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+RENAMED_DIR = os.path.join(BASE_DIR, "renamed")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 # 从环境变量读取API配置
 API_KEY = os.getenv("API_KEY")
@@ -33,11 +53,11 @@ client = OpenAI(
 # 默认命名规则提示词
 DEFAULT_NAMING_PROMPT = "识别图片内容，将图片命名为日期，客户名称，金额，不要其他多余的文字（最后要加一个。号），比如：2022年5月10日，中海上湾卖水泥陈培，金额0元。"
 
-# 创建必要的文件夹
-os.makedirs("uploads", exist_ok=True)
-os.makedirs("renamed", exist_ok=True)
-os.makedirs("static", exist_ok=True)
-os.makedirs("templates", exist_ok=True)
+# 创建必要的文件夹（使用绝对路径）
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+os.makedirs(RENAMED_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 
 def encode_image_to_base64(image_path):
@@ -171,8 +191,8 @@ def upload_files():
                     )
                     continue
 
-                # 保存到uploads文件夹
-                upload_path = os.path.join("uploads", original_filename)
+                # 保存到uploads文件夹（使用绝对路径）
+                upload_path = os.path.join(UPLOADS_DIR, original_filename)
                 file.save(upload_path)
 
                 # 使用AI生成文件名（传入命名规则）
@@ -181,15 +201,15 @@ def upload_files():
                 # 生成新文件名
                 new_filename = generate_new_filename(ai_generated_name, file_extension)
 
-                # 复制文件到renamed文件夹
-                renamed_path = os.path.join("renamed", new_filename)
+                # 复制文件到renamed文件夹（使用绝对路径）
+                renamed_path = os.path.join(RENAMED_DIR, new_filename)
 
                 # 如果文件名已存在，添加序号
                 counter = 1
                 base_name, ext = os.path.splitext(new_filename)
                 while os.path.exists(renamed_path):
                     new_filename = f"{base_name}_{counter}{ext}"
-                    renamed_path = os.path.join("renamed", new_filename)
+                    renamed_path = os.path.join(RENAMED_DIR, new_filename)
                     counter += 1
 
                 # 复制文件
@@ -234,10 +254,9 @@ def download_all():
         memory_file = io.BytesIO()
 
         with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as zf:
-            renamed_dir = "renamed"
-            if os.path.exists(renamed_dir):
-                for filename in os.listdir(renamed_dir):
-                    file_path = os.path.join(renamed_dir, filename)
+            if os.path.exists(RENAMED_DIR):
+                for filename in os.listdir(RENAMED_DIR):
+                    file_path = os.path.join(RENAMED_DIR, filename)
                     if os.path.isfile(file_path):
                         zf.write(file_path, filename)
 
@@ -261,14 +280,14 @@ def clear_files():
         import shutil
 
         # 清空uploads文件夹
-        if os.path.exists("uploads"):
-            shutil.rmtree("uploads")
-            os.makedirs("uploads")
+        if os.path.exists(UPLOADS_DIR):
+            shutil.rmtree(UPLOADS_DIR)
+            os.makedirs(UPLOADS_DIR)
 
         # 清空renamed文件夹
-        if os.path.exists("renamed"):
-            shutil.rmtree("renamed")
-            os.makedirs("renamed")
+        if os.path.exists(RENAMED_DIR):
+            shutil.rmtree(RENAMED_DIR)
+            os.makedirs(RENAMED_DIR)
 
         return jsonify({"message": "文件已清空"})
 
