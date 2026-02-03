@@ -109,8 +109,9 @@ def extract_info_from_image(image_path, naming_prompt=None):
         if "\n" in result:
             result = result.split("\n")[0].strip()
 
-        # 移除可能的序号前缀（如 "1. " "2. "）
-        result = re.sub(r"^\d+\.\s*", "", result)
+        # 移除可能的序号前缀（如 "1. " "2. "），注意用 \s+ 确保序号后有空格
+        # 避免误删 "12.24-12.27" 这种日期格式的开头
+        result = re.sub(r"^\d+\.\s+", "", result)
 
         return result
 
@@ -143,6 +144,12 @@ def generate_new_filename(ai_generated_name, original_extension):
 
     # 如果AI返回的是有效内容，使用它；否则使用时间戳
     if cleaned_name and cleaned_name != "未知图片" and len(cleaned_name.strip()) > 0:
+        # 如果AI返回的名字已经包含图片扩展名，先移除它（避免双重扩展名如 xxx.jpg.jpg）
+        image_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]
+        for ext in image_extensions:
+            if cleaned_name.lower().endswith(ext):
+                cleaned_name = cleaned_name[: -len(ext)]
+                break
         new_name = f"{cleaned_name}{original_extension}"
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
