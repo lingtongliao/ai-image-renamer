@@ -50,34 +50,47 @@ def extract_info_from_image(image_path, naming_prompt=None):
     """使用AI模型从图片中提取信息"""
     try:
         # 使用自定义或默认的命名规则
-        prompt = naming_prompt if naming_prompt else DEFAULT_NAMING_PROMPT
+        user_prompt = naming_prompt if naming_prompt else DEFAULT_NAMING_PROMPT
 
         # 编码图片为base64
         base64_image = encode_image_to_base64(image_path)
 
-        # 构建消息
+        # 构建消息，添加系统提示强制只输出文件名
         messages = [
+            {
+                "role": "system",
+                "content": "你是一个文件命名助手。你的任务是根据用户的命名规则，从图片中提取信息并生成文件名。重要：只输出文件名本身，不要输出任何解释、说明、编号或其他多余文字。直接输出一个可以作为文件名的字符串即可。",
+            },
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": prompt},
+                    {
+                        "type": "text",
+                        "text": f"请根据以下规则为这张图片生成文件名（只输出文件名，不要任何解释）：\n{user_prompt}",
+                    },
                     {
                         "type": "image_url",
                         "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
                     },
                 ],
-            }
+            },
         ]
 
         # 调用API
         response = client.chat.completions.create(
-            model=MODEL_NAME, messages=messages, max_tokens=200
+            model=MODEL_NAME, messages=messages, max_tokens=100
         )
 
         result = response.choices[0].message.content.strip()
         print(f"AI返回结果: {result}")
 
-        # 直接返回AI生成的文件名
+        # 后处理：如果AI仍然返回多行，只取第一行
+        if "\n" in result:
+            result = result.split("\n")[0].strip()
+
+        # 移除可能的序号前缀（如 "1. " "2. "）
+        result = re.sub(r"^\d+\.\s*", "", result)
+
         return result
 
     except Exception as e:
@@ -87,10 +100,18 @@ def extract_info_from_image(image_path, naming_prompt=None):
 
 def clean_filename(text):
     """清理文件名中的非法字符"""
+    # 移除换行符、回车符
+    text = text.replace("\n", "").replace("\r", "")
+
     # 移除或替换Windows文件名中的非法字符
     illegal_chars = '<>:"/\\|?*'
     for char in illegal_chars:
         text = text.replace(char, "")
+
+    # 限制文件名长度（Windows最大255字符，保守设置200）
+    if len(text) > 200:
+        text = text[:200]
+
     return text.strip()
 
 
